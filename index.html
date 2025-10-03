@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>3D Exhibition</title>
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://unpkg.com/aframe-extras@6.1.1/dist/aframe-extras.min.js"></script>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    #controls-popup {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.85); color: white;
+      display: flex; flex-direction: column;
+      justify-content: center; align-items: center;
+      z-index: 9999; text-align: center;
+    }
+    #controls-popup button {
+      padding: 12px 24px; margin-top: 20px; font-size: 16px;
+      cursor: pointer; border: none; border-radius: 6px; background: #4CAF50; color: white;
+    }
+  </style>
+</head>
+<body>
+
+<div id="controls-popup">
+  <h2>Welcome to the Exhibition</h2>
+  <p>Use <b>WASD</b> to walk</p>
+  <p>Use <b>Mouse</b> to look around</p>
+  <p>Press <b>Q</b> to go up, <b>E</b> to go down</p>
+  <button onclick="startExhibition()">Start Exhibition</button>
+</div>
+
+<a-scene>
+
+  <!-- Camera rig with camera-relative movement -->
+  <a-entity id="rig" position="0 1.6 0"
+            movement-controls="controls: keyboard; constrainToNavMesh: false">
+    <a-entity camera look-controls></a-entity>
+  </a-entity>
+
+  <!-- Floor -->
+  <a-plane rotation="-90 0 0" width="50" height="50" color="#7BC8A4"></a-plane>
+
+  <!-- Lights -->
+  <a-entity light="type: directional; intensity: 0.8" position="0 10 0"></a-entity>
+  <a-entity light="type: ambient; intensity: 0.5"></a-entity>
+
+  <!-- Poster container -->
+  <a-entity id="posters"></a-entity>
+
+</a-scene>
+
+<script>
+  // Hide instructions
+  function startExhibition() {
+    document.getElementById("controls-popup").style.display = "none";
+  }
+
+  // Height adjustment with Q/E
+  document.addEventListener("keydown", function(event) {
+    const rig = document.getElementById("rig");
+    let y = rig.object3D.position.y;
+    if(event.code === "KeyQ") rig.object3D.position.y = y + 0.2;
+    if(event.code === "KeyE") rig.object3D.position.y = Math.max(0.2, y - 0.2);
+  });
+
+  // --- Load posters from JSON ---
+  fetch('posters.json')
+    .then(res => res.json())
+    .then(posters => {
+      const container = document.querySelector('#posters');
+      const singleRowMax = 5;
+      const spacing = 4;
+
+      posters.forEach((src, index) => {
+        const img = new Image();
+        img.src = src;
+        img.onload = () => {
+          const aspect = img.naturalHeight / img.naturalWidth;
+          const width = 2;
+          const height = width * aspect;
+
+          const poster = document.createElement('a-plane');
+          poster.setAttribute('src', src);
+          poster.setAttribute('width', width);
+          poster.setAttribute('height', height);
+          poster.setAttribute('material', 'side: double; shader: standard');
+
+          // Layout logic
+          const total = posters.length;
+          let x = 0, yPos = height/2, z = -5, rotation = '0 0 0';
+
+          if(total <= singleRowMax){
+            // single row
+            const startX = -((total-1)/2) * spacing;
+            x = startX + index * spacing;
+          } else if(total <= 12){
+            // multi-row
+            const maxPerRow = singleRowMax;
+            const row = Math.floor(index / maxPerRow);
+            const col = index % maxPerRow;
+            const rowSpacing = 5;
+            const startX = -((Math.min(maxPerRow,total)-1)/2)*spacing;
+            x = startX + col * spacing;
+            z = -5 - row * rowSpacing;
+          } else {
+            // circular layout
+            const radius = 8;
+            const angle = (index / total) * Math.PI * 2;
+            x = Math.cos(angle) * radius;
+            z = Math.sin(angle) * radius;
+            rotation = `0 ${-angle*180/Math.PI + 180} 0`;
+          }
+
+          poster.setAttribute('position', `${x} ${yPos} ${z}`);
+          poster.setAttribute('rotation', rotation);
+
+          container.appendChild(poster);
+        };
+      });
+    })
+    .catch(err => console.error('Error loading posters.json:', err));
+</script>
+
+</body>
+</html>
