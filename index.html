@@ -30,13 +30,13 @@
   <button id="start-btn">Start Exhibition</button>
 </div>
 
-<a-scene background="color:#001a33">
+<a-scene background="color:#001a33" id="scene">
 
   <!-- Camera rig -->
   <a-entity id="rig" position="0 1.6 5" 
-          wasd-controls="acceleration: 20; fly: false; enabled: true"
-          look-controls="pointerLockEnabled: false; touchEnabled: true">
-  <a-entity camera></a-entity>
+            wasd-controls="acceleration: 20; fly: false; enabled: true"
+            look-controls="pointerLockEnabled: false; touchEnabled: true">
+    <a-entity camera></a-entity>
   </a-entity>
 
   <!-- Floor -->
@@ -57,49 +57,73 @@
 document.addEventListener('DOMContentLoaded', () => {
   const startBtn = document.getElementById('start-btn');
   const rig = document.getElementById('rig');
+  const sceneEl = document.getElementById('scene');
   let bathyData = null;
   let startPressed = false;
+  let bathyMeshAdded = false; // prevent duplicates
+  let quakesAdded = false;    // prevent duplicates
+
+  // Utility: ensure scene/THREE available
+  function whenSceneReady(cb) {
+    if (sceneEl.hasLoaded) cb();
+    else sceneEl.addEventListener('loaded', cb, { once: true });
+  }
+
+  // Utility: clear a container's THREE children
+  function clearObject3DChildren(container) {
+    if (!container || !container.object3D) return;
+    const children = [...container.object3D.children];
+    children.forEach(ch => container.object3D.remove(ch));
+  }
 
   // --- Start Exhibition ---
   startBtn.addEventListener('click', () => {
     document.getElementById('controls-popup').style.display = 'none';
     startPressed = true;
-    if(bathyData) addBathyMesh(bathyData);
+    if (bathyData) whenSceneReady(() => addBathyMesh(bathyData));
   });
 
   // --- Height adjustment Q/E ---
   document.addEventListener("keydown", e => {
+    if (!rig || !rig.object3D) return;
     const y = rig.object3D.position.y;
-    if(e.code === "KeyQ") rig.object3D.position.y = y + 0.5;
-    if(e.code === "KeyE") rig.object3D.position.y = Math.max(1, y - 0.5);
+    if (e.code === "KeyQ") rig.object3D.position.y = y + 0.5;
+    if (e.code === "KeyE") rig.object3D.position.y = Math.max(1, y - 0.5);
   });
 
-  // --- Load posters ---
+  // --- Load posters (preserve order after all load) ---
   fetch('posters.json')
     .then(res => res.json())
-    .then(posters => {
+    .then(srcs => {
       const container = document.querySelector('#posters');
       const spacing = 4;
-      posters.forEach((src,index)=>{
+
+      // Preload all images, then place in original order
+      const loaders = srcs.map(src => new Promise(resolve => {
         const img = new Image();
+        img.onload = () => resolve({ src, width: img.naturalWidth, height: img.naturalHeight });
+        img.onerror = () => resolve({ src, width: 1000, height: 1000 }); // fallback aspect
         img.src = src;
-        img.onload = () => {
-          const aspect = img.naturalHeight / img.naturalWidth;
+      }));
+
+      return Promise.all(loaders).then(images => {
+        images.forEach((meta, index) => {
+          const aspect = meta.height / meta.width;
           const width = 2;
           const height = width * aspect;
 
           const poster = document.createElement('a-plane');
-          poster.setAttribute('src', src);
+          poster.setAttribute('src', meta.src);
           poster.setAttribute('width', width);
           poster.setAttribute('height', height);
           poster.setAttribute('material','side: double; shader: flat');
 
-          const x = -((posters.length-1)/2)*spacing + index*spacing;
-          const yPos = height/2 + 0.5;
+          const x = -((images.length - 1) / 2) * spacing + index * spacing;
+          const yPos = height / 2 + 0.5;
           const z = -5;
-          poster.setAttribute('position',`${x} ${yPos} ${z}`);
+          poster.setAttribute('position', `${x} ${yPos} ${z}`);
           container.appendChild(poster);
-        };
+        });
       });
     })
     .catch(err => console.error('Posters error:', err));
@@ -109,41 +133,64 @@ document.addEventListener('DOMContentLoaded', () => {
     .then(res => res.json())
     .then(data => {
       bathyData = data;
-      if(startPressed) addBathyMesh(bathyData);
+      if (startPressed) whenSceneReady(() => addBathyMesh(bathyData));
     })
     .catch(err => console.error('Bathymetry error:', err));
 
   function addBathyMesh(data){
+    if (bathyMeshAdded) return;
+    bathyMeshAdded = true;
+
     const container = document.querySelector('#bathy');
+    if (!container || !container.object3D) return;
+
+    clearObject3DChildren(container);
+
     const scale = 3;
-    const landPoints = data.land.map(p=>({...p,type:'land'}));
-    const waterPoints = data.water.map(p=>({...p,type:'water'}));
+    const landPoints = data.land.map(p => ({...p, type:'land'}));
+    const waterPoints = data.water.map(p => ({...p, type:'water'}));
     const allPoints = [...landPoints, ...waterPoints];
 
     const geometry = new THREE.BufferGeometry();
-    const vertices = [];
-    const colors = [];
+    const vertices = new Float32Array(allPoints.length * 3);
+    const colors = new Float32Array(allPoints.length * 3);
 
-    allPoints.forEach(p=>{
+    for (let i = 0; i < allPoints.length; i++) {
+      const p = allPoints[i];
       const x = (p.x - 25) * scale;
       const z = (p.y - 36) * scale;
-      const y = p.z/50 + 3; // slightly above floor
+      const y = p.z / 50 + 3; // slightly above floor
 
-      vertices.push(x,y,-z);
+      const vi = i * 3;
+      vertices[vi] = x;
+      vertices[vi + 1] = y;
+      vertices[vi + 2] = -z;
 
-      if(p.type==='land') colors.push(0.133,0.545,0.133); // green
-      else colors.push(0.118,0.565,1); // blue
+      if (p.type === 'land') {
+        colors[vi] = 0.133; colors[vi + 1] = 0.545; colors[vi + 2] = 0.133; // green
+      } else {
+        colors[vi] = 0.118; colors[vi + 1] = 0.565; colors[vi + 2] = 1.0;   // blue
+      }
+    }
+
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+    // Use a reasonable fixed pixel size with attenuation for perspective cameras
+    // Per THREE docs: size is pixels if sizeAttenuation=false, world-units if true (default true) [web:5]
+    const material = new THREE.PointsMaterial({
+      vertexColors: true,
+      size: 0.03,
+      sizeAttenuation: true,
+      transparent: true,
+      opacity: 0.6
     });
 
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices,3));
-    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors,3));
-
-    const material = new THREE.PointsMaterial({vertexColors:true, size:0.03, transparent:true, opacity:0.3});
     const points = new THREE.Points(geometry, material);
 
     // Position next to posters
     const posters = document.querySelectorAll('#posters a-plane');
-    const maxX = posters.length > 0 ? Math.max(...Array.from(posters).map(p=>p.object3D.position.x)) : 0;
+    const maxX = posters.length > 0 ? Math.max(...Array.from(posters).map(p => p.object3D.position.x)) : 0;
     points.position.set(maxX + 4, 0, -5);
 
     container.object3D.add(points);
@@ -154,68 +201,79 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- Load quakes ---
   function loadQuakes(xOffset){
+    if (quakesAdded) return;
     fetch('data/quakes.json')
       .then(res => res.json())
-      .then(data=>{
+      .then(data => {
+        if (quakesAdded) return;
+        quakesAdded = true;
+
         const container = document.querySelector('#quakes');
+        if (!container || !container.object3D) return;
+
+        clearObject3DChildren(container);
+
         const scale = 3;
         const yOffset = 2.8; // slightly below bathymetry plane
 
         data.sort((a,b)=> new Date(a.time || a.datetime) - new Date(b.time || b.datetime));
 
         const geometry = new THREE.BufferGeometry();
-        const vertices = [];
-        const colors = [];
-        const sizes = [];
+        const vertices = new Float32Array(data.length * 3);
+        const colors = new Float32Array(data.length * 3);
 
-        data.forEach(event=>{
+        for (let i = 0; i < data.length; i++) {
+          const event = data[i];
           const x = (event.x - 25) * scale;
           const z = (event.y - 36) * scale;
-          const y = event.z/50 + yOffset;
+          const y = event.z / 50 + yOffset;
 
-          vertices.push(x,y,-z);
-          colors.push(1,0,0);
-          sizes.push(0); // start invisible
-        });
+          const vi = i * 3;
+          vertices[vi] = x;
+          vertices[vi + 1] = y;
+          vertices[vi + 2] = -z;
+
+          colors[vi] = 1; colors[vi + 1] = 0; colors[vi + 2] = 0; // red
+        }
 
         geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices,3));
         geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors,3));
-        geometry.setAttribute('size', new THREE.Float32BufferAttribute(sizes,1));
 
+        // Use a visible fixed size; no per-point size attribute without custom shader
         const material = new THREE.PointsMaterial({
-          vertexColors:true,
-          size:0.06,
-          transparent:true,
-          opacity:0.9
+          vertexColors: true,
+          size: 0.06,
+          sizeAttenuation: true,
+          transparent: true,
+          opacity: 0.95
         });
 
         const points = new THREE.Points(geometry, material);
-        points.position.set(xOffset,0,-5);
+        points.position.set(xOffset, 0, -5);
         container.object3D.add(points);
 
-        // Animate quakes
-        animateQuakes(geometry, sizes);
+        // Simple reveal animation by fading opacity up instead of per-vertex sizes
+        // Per-vertex size would require a custom shader; PointsMaterial ignores custom "size" attribute [web:5][web:11]
+        let shown = 0;
+        const step = Math.max(1, Math.floor(data.length / 50));
+        const interval = setInterval(() => {
+          shown += step;
+          const alpha = Math.min(1, shown / data.length);
+          material.opacity = 0.3 + 0.65 * alpha;
+          material.needsUpdate = true;
+          if (shown >= data.length) clearInterval(interval);
+        }, 100);
       })
       .catch(err => console.error('Quakes error:',err));
   }
 
-  function animateQuakes(geometry,sizes){
-    const total = sizes.count;
-    let count = 0;
-    const interval = setInterval(()=>{
-      if(count>=total){
-        clearInterval(interval);
-        return;
-      }
-      sizes.setX(count, 0.06 + Math.random()*0.02);
-      sizes.needsUpdate = true;
-      count++;
-    },100);
-  }
+  // Wait for scene readiness for any THREE operations
+  whenSceneReady(() => {
+    // no-op placeholder; ensures A-Frame/THREE is initialized before dynamic additions [web:15][web:6]
+  });
 
 });
 </script>
-
 
 <!-- Mobile movement buttons -->
 <div id="mobile-controls" style="
@@ -232,57 +290,71 @@ document.addEventListener('DOMContentLoaded', () => {
   <button data-move="backward" style="padding:10px 15px;">▼</button>
   <button data-move="left" style="padding:10px 15px;">◀</button>
   <button data-move="right" style="padding:10px 15px;">▶</button>
-  <button data-move="up">⬆</button>
-  <button data-move="down">⬇</button>
+  <button data-move="up" style="padding:10px 15px;">⬆</button>
+  <button data-move="down" style="padding:10px 15px;">⬇</button>
 </div>
 
 <script>
   (function(){
     const rig = document.getElementById('rig');
+    const sceneEl = document.getElementById('scene');
     if(!rig) return;
 
     const moveSpeed = 0.2;
     const activeKeys = {};
 
     document.querySelectorAll('#mobile-controls button').forEach(btn => {
-      btn.addEventListener('touchstart', e=>{
-        e.preventDefault();
-        activeKeys[btn.dataset.move] = true;
+      // Support both touch and mouse for robustness
+      ['touchstart','mousedown'].forEach(ev => {
+        btn.addEventListener(ev, e=>{
+          e.preventDefault();
+          activeKeys[btn.dataset.move] = true;
+        });
       });
-      btn.addEventListener('touchend', e=>{
-        e.preventDefault();
-        activeKeys[btn.dataset.move] = false;
+      ['touchend','mouseup','mouseleave'].forEach(ev => {
+        btn.addEventListener(ev, e=>{
+          e.preventDefault();
+          activeKeys[btn.dataset.move] = false;
+        });
       });
     });
 
-    function moveLoop(){
-      if(!rig) return;
-      const direction = new THREE.Vector3();
-      rig.object3D.getWorldDirection(direction); // camera forward
-
-      const right = new THREE.Vector3();
-      right.crossVectors(rig.object3D.up, direction).normalize();
-     
-
-      // Forward/backward
-      if(activeKeys.forward) rig.object3D.position.addScaledVector(direction, -moveSpeed);
-      if(activeKeys.backward) rig.object3D.position.addScaledVector(direction, moveSpeed);
-
-      // Left/right
-      if(activeKeys.left) rig.object3D.position.addScaledVector(right, -moveSpeed); // flipped
-      if(activeKeys.right) rig.object3D.position.addScaledVector(right, moveSpeed);
-
-      // Up/down
-      if(activeKeys.up) rig.object3D.position.y += moveSpeed;
-      if(activeKeys.down) rig.object3D.position.y -= moveSpeed;
-
-      requestAnimationFrame(moveLoop);
+    function whenSceneReady(cb) {
+      if (sceneEl.hasLoaded) cb();
+      else sceneEl.addEventListener('loaded', cb, { once: true });
     }
 
-    moveLoop();
+    whenSceneReady(() => {
+      function moveLoop(){
+        if(!rig || !rig.object3D) return;
+
+        // In three.js, camera looks down -Z; getWorldDirection returns the forward direction (-Z) by default [web:10]
+        const forward = new THREE.Vector3();
+        rig.object3D.getWorldDirection(forward); // forward ≈ (0,0,-1) in world space [web:10]
+
+        // Compute right vector as cross of forward with world up
+        const up = new THREE.Vector3(0,1,0);
+        const right = new THREE.Vector3().crossVectors(forward, up).normalize();
+
+        // Forward/backward (move along forward)
+        if(activeKeys.forward) rig.object3D.position.addScaledVector(forward, moveSpeed);
+        if(activeKeys.backward) rig.object3D.position.addScaledVector(forward, -moveSpeed);
+
+        // Left/right (move along right)
+        if(activeKeys.left) rig.object3D.position.addScaledVector(right, -moveSpeed);
+        if(activeKeys.right) rig.object3D.position.addScaledVector(right, moveSpeed);
+
+        // Up/down
+        if(activeKeys.up) rig.object3D.position.y += moveSpeed;
+        if(activeKeys.down) rig.object3D.position.y -= moveSpeed;
+
+        requestAnimationFrame(moveLoop);
+      }
+
+      moveLoop();
+    });
   })();
 </script>
-
 
 <style>
   /* Hide mobile controls on desktop */
