@@ -33,8 +33,10 @@
 <a-scene background="color:#001a33">
 
   <!-- Camera rig -->
-  <a-entity id="rig" position="0 1.6 5" wasd-controls look-controls>
-    <a-entity camera></a-entity>
+  <a-entity id="rig" position="0 1.6 5" 
+          wasd-controls="acceleration: 20; fly: false; enabled: true"
+          look-controls="pointerLockEnabled: false; touchEnabled: true">
+  <a-entity camera></a-entity>
   </a-entity>
 
   <!-- Floor -->
