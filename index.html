@@ -216,5 +216,80 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 
+
+<!-- Mobile movement buttons -->
+<div id="mobile-controls" style="
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  z-index: 9999;
+  pointer-events: auto;
+">
+  <button data-move="forward" style="padding:10px 15px;">▲</button>
+  <button data-move="backward" style="padding:10px 15px;">▼</button>
+  <button data-move="left" style="padding:10px 15px;">◀</button>
+  <button data-move="right" style="padding:10px 15px;">▶</button>
+</div>
+
+<script>
+  (function(){
+    const rig = document.getElementById('rig');
+    if(!rig) return;
+
+    // Movement parameters
+    const moveSpeed = 0.2;
+    const activeKeys = {};
+
+    // Button press handling
+    document.querySelectorAll('#mobile-controls button').forEach(btn => {
+      btn.addEventListener('touchstart', (e)=>{
+        e.preventDefault();
+        activeKeys[btn.dataset.move] = true;
+      });
+      btn.addEventListener('touchend', (e)=>{
+        e.preventDefault();
+        activeKeys[btn.dataset.move] = false;
+      });
+    });
+
+    // Movement loop
+    function moveLoop(){
+      if(!rig) return;
+      const direction = new THREE.Vector3();
+      rig.object3D.getWorldDirection(direction); // camera forward
+
+      const right = new THREE.Vector3();
+      right.crossVectors(rig.object3D.up, direction).normalize();
+
+      if(activeKeys.forward) {
+        rig.object3D.position.addScaledVector(direction, moveSpeed);
+      }
+      if(activeKeys.backward) {
+        rig.object3D.position.addScaledVector(direction, -moveSpeed);
+      }
+      if(activeKeys.left) {
+        rig.object3D.position.addScaledVector(right, moveSpeed);
+      }
+      if(activeKeys.right) {
+        rig.object3D.position.addScaledVector(right, -moveSpeed);
+      }
+
+      requestAnimationFrame(moveLoop);
+    }
+
+    moveLoop();
+  })();
+</script>
+
+<style>
+  /* Hide mobile controls on desktop */
+  @media (min-width: 768px) {
+    #mobile-controls { display: none !important; }
+  }
+</style>
+
 </body>
 </html>
