@@ -264,12 +264,12 @@ document.addEventListener('DOMContentLoaded', () => {
       right.crossVectors(rig.object3D.up, direction).normalize();
 
       // Forward/backward
-      if(activeKeys.forward) rig.object3D.position.addScaledVector(direction, moveSpeed);
-      if(activeKeys.backward) rig.object3D.position.addScaledVector(direction, -moveSpeed);
+      if(activeKeys.forward) rig.object3D.position.addScaledVector(direction, -moveSpeed);
+      if(activeKeys.backward) rig.object3D.position.addScaledVector(direction, moveSpeed);
 
       // Left/right
-      if(activeKeys.left) rig.object3D.position.addScaledVector(right, -moveSpeed); // flipped
-      if(activeKeys.right) rig.object3D.position.addScaledVector(right, moveSpeed);
+      if(activeKeys.left) rig.object3D.position.addScaledVector(right, moveSpeed); // flipped
+      if(activeKeys.right) rig.object3D.position.addScaledVector(right, -moveSpeed);
 
       // Up/down
       if(activeKeys.up) rig.object3D.position.y += moveSpeed;
