@@ -4,19 +4,19 @@
   <meta charset="UTF-8">
   <title>3D Exhibition</title>
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-  <script src="https://unpkg.com/aframe-extras@6.1.1/dist/aframe-extras.min.js"></script>
   <style>
-    body { margin: 0; overflow: hidden; }
+    body { margin:0; overflow:hidden; }
     #controls-popup {
-      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0,0,0,0.85); color: white;
-      display: flex; flex-direction: column;
-      justify-content: center; align-items: center;
-      z-index: 9999; text-align: center;
+      position: fixed; top:0; left:0; width:100%; height:100%;
+      background: rgba(0,0,0,0.85); color:white;
+      display:flex; flex-direction:column;
+      justify-content:center; align-items:center;
+      z-index:9999; text-align:center;
     }
     #controls-popup button {
-      padding: 12px 24px; margin-top: 20px; font-size: 16px;
-      cursor: pointer; border: none; border-radius: 6px; background: #4CAF50; color: white;
+      padding:12px 24px; margin-top:20px; font-size:16px;
+      cursor:pointer; border:none; border-radius:6px;
+      background:#4CAF50; color:white;
     }
   </style>
 </head>
@@ -24,55 +24,61 @@
 
 <div id="controls-popup">
   <h2>Welcome to the Exhibition</h2>
-  <p>Use <b>WASD</b> to walk</p>
+  <p>Use <b>WASD</b> to move</p>
   <p>Use <b>Mouse</b> to look around</p>
   <p>Press <b>Q</b> to go up, <b>E</b> to go down</p>
-  <button onclick="startExhibition()">Start Exhibition</button>
+  <button id="start-btn">Start Exhibition</button>
 </div>
 
-<a-scene>
+<a-scene background="color:#001a33">
 
-  <!-- Camera rig with camera-relative movement -->
-  <a-entity id="rig" position="0 1.6 0"
-            movement-controls="controls: keyboard; constrainToNavMesh: false">
-    <a-entity camera look-controls></a-entity>
+  <!-- Camera rig -->
+  <a-entity id="rig" position="0 1.6 5" wasd-controls look-controls>
+    <a-entity camera></a-entity>
   </a-entity>
 
   <!-- Floor -->
-  <a-plane rotation="-90 0 0" width="50" height="50" color="#7BC8A4"></a-plane>
+  <a-plane rotation="-90 0 0" width="50" height="50" color="#033"></a-plane>
 
   <!-- Lights -->
-  <a-entity light="type: directional; intensity: 0.8" position="0 10 0"></a-entity>
-  <a-entity light="type: ambient; intensity: 0.5"></a-entity>
+  <a-entity light="type: directional; intensity:0.8" position="10 20 10"></a-entity>
+  <a-entity light="type: ambient; intensity:0.5"></a-entity>
 
-  <!-- Poster container -->
+  <!-- Containers -->
   <a-entity id="posters"></a-entity>
+  <a-entity id="bathy"></a-entity>
+  <a-entity id="quakes"></a-entity>
 
 </a-scene>
 
 <script>
-  // Hide instructions
-  function startExhibition() {
-    document.getElementById("controls-popup").style.display = "none";
-  }
+document.addEventListener('DOMContentLoaded', () => {
+  const startBtn = document.getElementById('start-btn');
+  const rig = document.getElementById('rig');
+  let bathyData = null;
+  let startPressed = false;
 
-  // Height adjustment with Q/E
-  document.addEventListener("keydown", function(event) {
-    const rig = document.getElementById("rig");
-    let y = rig.object3D.position.y;
-    if(event.code === "KeyQ") rig.object3D.position.y = y + 0.2;
-    if(event.code === "KeyE") rig.object3D.position.y = Math.max(0.2, y - 0.2);
+  // --- Start Exhibition ---
+  startBtn.addEventListener('click', () => {
+    document.getElementById('controls-popup').style.display = 'none';
+    startPressed = true;
+    if(bathyData) addBathyMesh(bathyData);
   });
 
-  // --- Load posters from JSON ---
+  // --- Height adjustment Q/E ---
+  document.addEventListener("keydown", e => {
+    const y = rig.object3D.position.y;
+    if(e.code === "KeyQ") rig.object3D.position.y = y + 0.5;
+    if(e.code === "KeyE") rig.object3D.position.y = Math.max(1, y - 0.5);
+  });
+
+  // --- Load posters ---
   fetch('posters.json')
     .then(res => res.json())
     .then(posters => {
       const container = document.querySelector('#posters');
-      const singleRowMax = 5;
       const spacing = 4;
-
-      posters.forEach((src, index) => {
+      posters.forEach((src,index)=>{
         const img = new Image();
         img.src = src;
         img.onload = () => {
@@ -84,42 +90,128 @@
           poster.setAttribute('src', src);
           poster.setAttribute('width', width);
           poster.setAttribute('height', height);
-          poster.setAttribute('material', 'side: double; shader: standard');
+          poster.setAttribute('material','side: double; shader: flat');
 
-          // Layout logic
-          const total = posters.length;
-          let x = 0, yPos = height/2, z = -5, rotation = '0 0 0';
-
-          if(total <= singleRowMax){
-            // single row
-            const startX = -((total-1)/2) * spacing;
-            x = startX + index * spacing;
-          } else if(total <= 12){
-            // multi-row
-            const maxPerRow = singleRowMax;
-            const row = Math.floor(index / maxPerRow);
-            const col = index % maxPerRow;
-            const rowSpacing = 5;
-            const startX = -((Math.min(maxPerRow,total)-1)/2)*spacing;
-            x = startX + col * spacing;
-            z = -5 - row * rowSpacing;
-          } else {
-            // circular layout
-            const radius = 8;
-            const angle = (index / total) * Math.PI * 2;
-            x = Math.cos(angle) * radius;
-            z = Math.sin(angle) * radius;
-            rotation = `0 ${-angle*180/Math.PI + 180} 0`;
-          }
-
-          poster.setAttribute('position', `${x} ${yPos} ${z}`);
-          poster.setAttribute('rotation', rotation);
-
+          const x = -((posters.length-1)/2)*spacing + index*spacing;
+          const yPos = height/2 + 0.5;
+          const z = -5;
+          poster.setAttribute('position',`${x} ${yPos} ${z}`);
           container.appendChild(poster);
         };
       });
     })
-    .catch(err => console.error('Error loading posters.json:', err));
+    .catch(err => console.error('Posters error:', err));
+
+  // --- Load bathymetry ---
+  fetch('data/baltic_bathy.json')
+    .then(res => res.json())
+    .then(data => {
+      bathyData = data;
+      if(startPressed) addBathyMesh(bathyData);
+    })
+    .catch(err => console.error('Bathymetry error:', err));
+
+  function addBathyMesh(data){
+    const container = document.querySelector('#bathy');
+    const scale = 3;
+    const landPoints = data.land.map(p=>({...p,type:'land'}));
+    const waterPoints = data.water.map(p=>({...p,type:'water'}));
+    const allPoints = [...landPoints, ...waterPoints];
+
+    const geometry = new THREE.BufferGeometry();
+    const vertices = [];
+    const colors = [];
+
+    allPoints.forEach(p=>{
+      const x = (p.x - 25) * scale;
+      const z = (p.y - 36) * scale;
+      const y = p.z/50 + 3; // slightly above floor
+
+      vertices.push(x,y,-z);
+
+      if(p.type==='land') colors.push(0.133,0.545,0.133); // green
+      else colors.push(0.118,0.565,1); // blue
+    });
+
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices,3));
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors,3));
+
+    const material = new THREE.PointsMaterial({vertexColors:true, size:0.03, transparent:true, opacity:0.3});
+    const points = new THREE.Points(geometry, material);
+
+    // Position next to posters
+    const posters = document.querySelectorAll('#posters a-plane');
+    const maxX = posters.length > 0 ? Math.max(...Array.from(posters).map(p=>p.object3D.position.x)) : 0;
+    points.position.set(maxX + 4, 0, -5);
+
+    container.object3D.add(points);
+
+    // --- Load quake points below bathymetry ---
+    loadQuakes(maxX + 4);
+  }
+
+  // --- Load quakes ---
+  function loadQuakes(xOffset){
+    fetch('data/quakes.json')
+      .then(res => res.json())
+      .then(data=>{
+        const container = document.querySelector('#quakes');
+        const scale = 3;
+        const yOffset = 2.8; // slightly below bathymetry plane
+
+        data.sort((a,b)=> new Date(a.time || a.datetime) - new Date(b.time || b.datetime));
+
+        const geometry = new THREE.BufferGeometry();
+        const vertices = [];
+        const colors = [];
+        const sizes = [];
+
+        data.forEach(event=>{
+          const x = (event.x - 25) * scale;
+          const z = (event.y - 36) * scale;
+          const y = event.z/50 + yOffset;
+
+          vertices.push(x,y,-z);
+          colors.push(1,0,0);
+          sizes.push(0); // start invisible
+        });
+
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices,3));
+        geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors,3));
+        geometry.setAttribute('size', new THREE.Float32BufferAttribute(sizes,1));
+
+        const material = new THREE.PointsMaterial({
+          vertexColors:true,
+          size:0.06,
+          transparent:true,
+          opacity:0.9
+        });
+
+        const points = new THREE.Points(geometry, material);
+        points.position.set(xOffset,0,-5);
+        container.object3D.add(points);
+
+        // Animate quakes
+        animateQuakes(geometry, sizes);
+      })
+      .catch(err => console.error('Quakes error:',err));
+  }
+
+  function animateQuakes(geometry,sizes){
+    const total = sizes.count;
+    let count = 0;
+    const interval = setInterval(()=>{
+      if(count>=total){
+        clearInterval(interval);
+        return;
+      }
+      sizes.setX(count, 0.06 + Math.random()*0.02);
+      sizes.needsUpdate = true;
+      count++;
+    },100);
+  }
+
+});
 </script>
 
 </body>
