@@ -232,6 +232,8 @@ document.addEventListener('DOMContentLoaded', () => {
   <button data-move="backward" style="padding:10px 15px;">▼</button>
   <button data-move="left" style="padding:10px 15px;">◀</button>
   <button data-move="right" style="padding:10px 15px;">▶</button>
+  <button data-move="up">⬆</button>
+  <button data-move="down">⬇</button>
 </div>
 
 <script>
@@ -239,23 +241,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const rig = document.getElementById('rig');
     if(!rig) return;
 
-    // Movement parameters
     const moveSpeed = 0.2;
     const activeKeys = {};
 
-    // Button press handling
     document.querySelectorAll('#mobile-controls button').forEach(btn => {
-      btn.addEventListener('touchstart', (e)=>{
+      btn.addEventListener('touchstart', e=>{
         e.preventDefault();
         activeKeys[btn.dataset.move] = true;
       });
-      btn.addEventListener('touchend', (e)=>{
+      btn.addEventListener('touchend', e=>{
         e.preventDefault();
         activeKeys[btn.dataset.move] = false;
       });
     });
 
-    // Movement loop
     function moveLoop(){
       if(!rig) return;
       const direction = new THREE.Vector3();
@@ -264,18 +263,17 @@ document.addEventListener('DOMContentLoaded', () => {
       const right = new THREE.Vector3();
       right.crossVectors(rig.object3D.up, direction).normalize();
 
-      if(activeKeys.forward) {
-        rig.object3D.position.addScaledVector(direction, moveSpeed);
-      }
-      if(activeKeys.backward) {
-        rig.object3D.position.addScaledVector(direction, -moveSpeed);
-      }
-      if(activeKeys.left) {
-        rig.object3D.position.addScaledVector(right, moveSpeed);
-      }
-      if(activeKeys.right) {
-        rig.object3D.position.addScaledVector(right, -moveSpeed);
-      }
+      // Forward/backward
+      if(activeKeys.forward) rig.object3D.position.addScaledVector(direction, moveSpeed);
+      if(activeKeys.backward) rig.object3D.position.addScaledVector(direction, -moveSpeed);
+
+      // Left/right
+      if(activeKeys.left) rig.object3D.position.addScaledVector(right, -moveSpeed); // flipped
+      if(activeKeys.right) rig.object3D.position.addScaledVector(right, moveSpeed);
+
+      // Up/down
+      if(activeKeys.up) rig.object3D.position.y += moveSpeed;
+      if(activeKeys.down) rig.object3D.position.y -= moveSpeed;
 
       requestAnimationFrame(moveLoop);
     }
@@ -283,6 +281,7 @@ document.addEventListener('DOMContentLoaded', () => {
     moveLoop();
   })();
 </script>
+
 
 <style>
   /* Hide mobile controls on desktop */
